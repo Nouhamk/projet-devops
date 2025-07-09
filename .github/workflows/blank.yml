@@ -1,0 +1,65 @@
+name: Deploy TrapUrCrap to Azure
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Permet de lancer manuellement
+
+env:
+  ACR_NAME: ${{ secrets.ACR_NAME }}
+  RESOURCE_GROUP: rg-trapurcrap-prod
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Login to ACR
+      run: |
+        az acr login --name ${{ secrets.ACR_NAME }}
+
+    - name: Build and Push Backend
+      run: |
+        cd backend
+        docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/trapurcrap-backend:latest .
+        docker push ${{ secrets.ACR_NAME }}.azurecr.io/trapurcrap-backend:latest
+
+    - name: Build and Push Frontend
+      run: |
+        cd frontend
+        docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/trapurcrap-frontend:latest .
+        docker push ${{ secrets.ACR_NAME }}.azurecr.io/trapurcrap-frontend:latest
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: Terraform Init
+      run: terraform init
+      working-directory: ./terraform
+
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main'
+      run: terraform apply -auto-approve
+      working-directory: ./terraform
+      env:
+        TF_VAR_mongo_uri: ${{ secrets.MONGO_URI }}
+        TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+        TF_VAR_stripe_secret_key: ${{ secrets.STRIPE_SECRET_KEY }}
+        TF_VAR_smtp_user: ${{ secrets.SMTP_USER }}
+        TF_VAR_smtp_pass: ${{ secrets.SMTP_PASS }}
+
+    - name: Display URLs
+      run: |
+        echo "🎉 Deployment completed!"
+        echo "Frontend: http://trapurcrap-frontend.francecentral.azurecontainer.io:8080"
+        echo "Backend: http://trapurcrap-backend.francecentral.azurecontainer.io:5000"
