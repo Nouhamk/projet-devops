@@ -1,0 +1,88 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  ACR_NAME: acrtrapurcrap
+  RESOURCE_GROUP: rg-trapurcrap-prod
+  BACKEND_IMAGE: trapurcrap-backend
+  FRONTEND_IMAGE: trapurcrap-frontend
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 1. Checkout du code
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 2. Connexion à Azure
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    # 3. Connexion à Azure Container Registry
+    - name: Login to ACR
+      run: |
+        az acr login --name ${{ env.ACR_NAME }}
+
+    # 4. Build et Push Backend
+    - name: Build and Push Backend
+      run: |
+        cd backend
+        docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest .
+        docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest
+
+    # 5. Build et Push Frontend
+    - name: Build and Push Frontend
+      run: |
+        cd frontend
+        docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest .
+        docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest
+
+    # 6. Setup Terraform
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    # 7. Terraform Init
+    - name: Terraform Init
+      run: |
+        terraform init
+      working-directory: ./
+
+    # 8. Terraform Plan
+    - name: Terraform Plan
+      run: |
+        terraform plan -out=tfplan
+      working-directory: ./
+
+    # 9. Terraform Apply (seulement sur main)
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main'
+      run: |
+        terraform apply -auto-approve tfplan
+      working-directory: ./
+
+    # 10. Redémarrer les containers (forcer la mise à jour)
+    - name: Restart Containers
+      if: github.ref == 'refs/heads/main'
+      run: |
+        az container restart --name trapurcrap-backend --resource-group ${{ env.RESOURCE_GROUP }}
+        az container restart --name trapurcrap-frontend --resource-group ${{ env.RESOURCE_GROUP }}
+
+    # 11. Afficher les URLs
+    - name: Show URLs
+      if: github.ref == 'refs/heads/main'
+      run: |
+        echo "🎉 Deployment completed!"
+        echo "Frontend URL: http://trapurcrap-frontend.francecentral.azurecontainer.io:8080"
+        echo "Backend URL: http://trapurcrap-backend.francecentral.azurecontainer.io:5000"
+        echo "Health Check: http://trapurcrap-backend.francecentral.azurecontainer.io:5000/health"
