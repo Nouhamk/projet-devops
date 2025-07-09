@@ -7,7 +7,7 @@ on:
 
 env:
   ACR_NAME: acrtrapurcrapv2
-  RESOURCE_GROUP: rg-trapurcrap-prod-v2
+  RESOURCE_GROUP: rg-trapurcrap-prod-v3
   BACKEND_IMAGE: trapurcrap-backend
   FRONTEND_IMAGE: trapurcrap-frontend
 
