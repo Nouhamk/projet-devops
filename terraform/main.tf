@@ -15,7 +15,7 @@ provider "azurerm" {
 
 # Resource Group
 resource "azurerm_resource_group" "main" {
-  name     = "rg-trapurcrap-prod"
+  name     = "rg-trapurcrap-prod-v2"
   location = "France Central"
 
   tags = {
@@ -26,7 +26,7 @@ resource "azurerm_resource_group" "main" {
 
 # Container Registry
 resource "azurerm_container_registry" "acr" {
-  name                = "acrtrapurcrap"
+  name                = "acrtrapurcrapv2"
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
   sku                 = "Basic"
