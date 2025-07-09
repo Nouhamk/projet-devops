@@ -1,13 +1,14 @@
-name: Deploy to Azure
+name: Deploy TrapUrCrap to Azure
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch: 
 
 env:
-  ACR_NAME: acrtrapurcrap
+  ACR_NAME: ${{ secrets.ACR_NAME }}
   RESOURCE_GROUP: rg-trapurcrap-prod
   BACKEND_IMAGE: trapurcrap-backend
   FRONTEND_IMAGE: trapurcrap-frontend
@@ -30,21 +31,21 @@ jobs:
     # 3. Connexion à Azure Container Registry
     - name: Login to ACR
       run: |
-        az acr login --name ${{ env.ACR_NAME }}
+        az acr login --name ${{ secrets.ACR_NAME }}
 
     # 4. Build et Push Backend
     - name: Build and Push Backend
       run: |
         cd backend
-        docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest .
-        docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest
+        docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest .
+        docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest
 
     # 5. Build et Push Frontend
     - name: Build and Push Frontend
       run: |
         cd frontend
-        docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest .
-        docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest
+        docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest .
+        docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest
 
     # 6. Setup Terraform
     - name: Setup Terraform
@@ -56,27 +57,39 @@ jobs:
     - name: Terraform Init
       run: |
         terraform init
-      working-directory: ./
+      working-directory: ./terraform
 
     # 8. Terraform Plan
     - name: Terraform Plan
       run: |
         terraform plan -out=tfplan
-      working-directory: ./
+      working-directory: ./terraform
+      env:
+        TF_VAR_mongo_uri: ${{ secrets.MONGO_URI }}
+        TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+        TF_VAR_stripe_secret_key: ${{ secrets.STRIPE_SECRET_KEY }}
+        TF_VAR_smtp_user: ${{ secrets.SMTP_USER }}
+        TF_VAR_smtp_pass: ${{ secrets.SMTP_PASS }}
 
     # 9. Terraform Apply (seulement sur main)
     - name: Terraform Apply
       if: github.ref == 'refs/heads/main'
       run: |
         terraform apply -auto-approve tfplan
-      working-directory: ./
+      working-directory: ./terraform
+      env:
+        TF_VAR_mongo_uri: ${{ secrets.MONGO_URI }}
+        TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+        TF_VAR_stripe_secret_key: ${{ secrets.STRIPE_SECRET_KEY }}
+        TF_VAR_smtp_user: ${{ secrets.SMTP_USER }}
+        TF_VAR_smtp_pass: ${{ secrets.SMTP_PASS }}
 
-    # 10. Redémarrer les containers (forcer la mise à jour)
+    # 10. Redémarrer les containers
     - name: Restart Containers
       if: github.ref == 'refs/heads/main'
       run: |
-        az container restart --name trapurcrap-backend --resource-group ${{ env.RESOURCE_GROUP }}
-        az container restart --name trapurcrap-frontend --resource-group ${{ env.RESOURCE_GROUP }}
+        az container restart --name trapurcrap-backend --resource-group ${{ env.RESOURCE_GROUP }} || true
+        az container restart --name trapurcrap-frontend --resource-group ${{ env.RESOURCE_GROUP }} || true
 
     # 11. Afficher les URLs
     - name: Show URLs
