@@ -40,7 +40,7 @@ resource "azurerm_container_registry" "acr" {
 
 # Cosmos DB Account (MongoDB API)
 resource "azurerm_cosmosdb_account" "mongodb" {
-  name                = "cosmos-trapurcrap"
+  name                = "cosmos-trapurcrap-v2"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   offer_type          = "Standard"
