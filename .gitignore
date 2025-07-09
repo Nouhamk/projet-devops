@@ -3,6 +3,15 @@
 *.tfstate
 *.tfstate.*
 *.tfvars
+*.tfvars.json
 .terraform.lock.hcl
 terraform.tfplan
 terraform.tfplan.*
+
+# Secrets
+*.key
+*.pem
+*.crt
+secrets/
+.env
+.env.local
