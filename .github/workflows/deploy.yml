@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  ACR_NAME: acrtrapurcrapv2
-  RESOURCE_GROUP: rg-trapurcrap-prod-v3
+  ACR_NAME: acrtrapurcrapv4
+  RESOURCE_GROUP: rg-trapurcrap-prod-v4
   BACKEND_IMAGE: trapurcrap-backend
   FRONTEND_IMAGE: trapurcrap-frontend
 
