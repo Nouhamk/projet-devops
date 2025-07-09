@@ -27,6 +27,19 @@ jobs:
       uses: azure/login@v1
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Create ACR if not exists
+      run: |
+        ACR_EXISTS=$(az acr list --resource-group rg-trapurcrap-prod --query "[?name=='${{ secrets.ACR_NAME }}']" --output tsv)
+        if [ -z "$ACR_EXISTS" ]; then
+          echo "Creating ACR ${{ secrets.ACR_NAME }}"
+          az acr create --resource-group rg-trapurcrap-prod \
+            --name ${{ secrets.ACR_NAME }} \
+            --sku Basic \
+            --admin-enabled
+        else
+          echo "ACR ${{ secrets.ACR_NAME }} already exists"
+        fi
 
     # 3. Connexion à Azure Container Registry
     - name: Login to ACR
