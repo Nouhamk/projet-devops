@@ -12,7 +12,86 @@ env:
   FRONTEND_IMAGE: trapurcrap-frontend
 
 jobs:
-  build-and-deploy:
+  # JOB 1: Infrastructure de base (sans Container Instances)
+  deploy-infrastructure:
+    runs-on: ubuntu-latest
+    outputs:
+      acr-login-server: ${{ steps.acr-info.outputs.login-server }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+        terraform_wrapper: false
+
+    - name: Terraform Init
+      run: terraform init
+      working-directory: ./terraform
+
+    # Déployer seulement Resource Group, ACR et Cosmos DB
+    - name: Terraform Apply Infrastructure
+      run: |
+        terraform apply -auto-approve \
+          -target=azurerm_resource_group.main \
+          -target=azurerm_container_registry.acr \
+          -target=azurerm_cosmosdb_account.mongodb \
+          -target=azurerm_cosmosdb_mongo_database.main
+      working-directory: ./terraform
+      env:
+        TF_VAR_mongo_uri: ${{ secrets.MONGO_URI }}
+        TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+        TF_VAR_stripe_secret_key: ${{ secrets.STRIPE_SECRET_KEY }}
+        TF_VAR_smtp_user: ${{ secrets.SMTP_USER }}
+        TF_VAR_smtp_pass: ${{ secrets.SMTP_PASS }}
+
+    - name: Get ACR Info
+      id: acr-info
+      run: |
+        LOGIN_SERVER=$(terraform output -raw acr_login_server)
+        echo "login-server=$LOGIN_SERVER" >> $GITHUB_OUTPUT
+      working-directory: ./terraform
+
+  # JOB 2: Build et Push des images
+  build-and-push:
+    needs: deploy-infrastructure
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Login to ACR
+      run: az acr login --name ${{ env.ACR_NAME }}
+
+    - name: Build and Push Backend
+      run: |
+        cd backend
+        docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest .
+        docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest
+
+    - name: Build and Push Frontend
+      run: |
+        cd frontend
+        docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest .
+        docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest
+
+  # JOB 3: Déployer les Container Instances
+  deploy-containers:
+    needs: [deploy-infrastructure, build-and-push]
     runs-on: ubuntu-latest
     
     steps:
@@ -28,12 +107,14 @@ jobs:
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: 1.5.0
+        terraform_wrapper: false
 
     - name: Terraform Init
       run: terraform init
       working-directory: ./terraform
 
-    - name: Terraform Apply
+    # Déployer les Container Instances
+    - name: Terraform Apply Containers
       run: terraform apply -auto-approve
       working-directory: ./terraform
       env:
@@ -43,24 +124,9 @@ jobs:
         TF_VAR_smtp_user: ${{ secrets.SMTP_USER }}
         TF_VAR_smtp_pass: ${{ secrets.SMTP_PASS }}
 
-    - name: Login to ACR
-      run: |
-        az acr login --name ${{ env.ACR_NAME }}
-
-    - name: Build and Push Backend
-      run: |
-        cd backend
-        docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest .
-        docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest
-
-    - name: Build and Push Frontend
-      run: |
-        cd frontend
-        docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest .
-        docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest
-
     - name: Display URLs
       run: |
         echo "🎉 Deployment completed!"
         echo "Frontend: http://trapurcrap-frontend.francecentral.azurecontainer.io:8080"
         echo "Backend: http://trapurcrap-backend.francecentral.azurecontainer.io:5000"
+        echo "Health Check: http://trapurcrap-backend.francecentral.azurecontainer.io:5000/health"

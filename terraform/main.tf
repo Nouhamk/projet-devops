@@ -173,6 +173,12 @@ resource "azurerm_container_group" "frontend" {
 }
 
 # Outputs
+
+output "acr_login_server" {
+  description = "The login server for the Azure Container Registry"
+  value       = azurerm_container_registry.acr.login_server
+}
+
 output "frontend_url" {
   value = "http://trapurcrap-frontend.francecentral.azurecontainer.io:8080"
 }
